@@ -29,7 +29,14 @@ extern int download_file(char* path);
 extern int push_file(char* path);
 
 #define IP_SIZE     16
-#define LOCAL_ETH   "eth0"
+
+static const char* eth_list[] = {
+    "eth0",
+    "wlan0",
+    "eth1",
+    "wlan1",
+};
+
 static char local_ip[IP_SIZE] = {0};
 static char broad_ip[IP_SIZE] = {0};
 
@@ -48,33 +55,64 @@ int get_eth_ip_info(const char *eth_inf, int cmd, char *ip)
     int sd;  
     struct sockaddr_in sin;  
     struct ifreq ifr;  
-  
+
     sd = socket(AF_INET, SOCK_DGRAM, 0);  
     if (-1 == sd)  
     {  
-        tlog_e("socket error: %s\n", strerror(errno));
+        tlog_e("socket error: %s", strerror(errno));
         return -1;        
     }  
-  
+
     strncpy(ifr.ifr_name, eth_inf, IFNAMSIZ);  
     ifr.ifr_name[IFNAMSIZ - 1] = 0;  
-      
+
     // if error: No such device
     if (ioctl(sd, cmd, &ifr) < 0)
     {  
-        tlog_e("ioctl error: %s\n", strerror(errno));
-        close(sd);  
-        return -1;  
-    }  
-  
+        tlog_e("get %s ioctl error: %s", ifr.ifr_name, strerror(errno));
+        close(sd);
+        return -1;
+    }
+
     memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
-	
+
     snprintf(ip, IP_SIZE, "%s", inet_ntoa(sin.sin_addr));
-  
+
     close(sd);
-	
+
     return 0; 
-	
+}
+
+/* find the available eth */
+int get_eth_ip_info_in_list(int cmd, char *ip)
+{
+    uint8_t i;
+    static const char *peth = NULL;
+
+    if(NULL == peth)
+    {
+        for(i = 0x00; i != sizeof(eth_list)/sizeof(eth_list[0]); i++)
+        {
+            if(0x00 == get_eth_ip_info(eth_list[i], cmd, ip))
+            {
+                peth = eth_list[i];
+                tlog_i("get the available eth %s", eth_list[i]);
+                return 0x00;
+            }
+        }
+
+        if(i == sizeof(eth_list)/sizeof(eth_list[0]))
+        {
+            tlog_e("None available eth!!!");
+            return -1;
+        }
+    }
+    else
+    {
+        return get_eth_ip_info(peth, cmd, ip);
+    }
+
+    return 0x00;
 }
 
 void* udp_bcast_thread(void* arg)
@@ -87,7 +125,7 @@ void* udp_bcast_thread(void* arg)
 	
 	char *cmd_line = (char*) arg;
 	
-	if(get_eth_ip_info(LOCAL_ETH, SIOCGIFBRDADDR, broad_ip) < 0)
+	if(get_eth_ip_info_in_list(SIOCGIFBRDADDR, broad_ip) < 0)
 	{
         tlog_e("get eth bcast addr error!!!");
 
@@ -231,7 +269,7 @@ int main(int argc, char *argv[])
 	
 	strcat(cmd_line, ";ip:");
 	
-	if(0 != get_eth_ip_info(LOCAL_ETH, SIOCGIFADDR, local_ip))
+	if(0 != get_eth_ip_info_in_list(SIOCGIFADDR, local_ip))
 	{
 		tlog_e("get local ip file!!!");
 		return -1;
