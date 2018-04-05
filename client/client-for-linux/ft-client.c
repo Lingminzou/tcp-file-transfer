@@ -320,6 +320,18 @@ int main(int argc, char *argv[])
 	    {
 		    return -1;
         }
+        else
+        {
+            char cmd_str[128] = {0x00};
+
+            snprintf(cmd_str, 128, "chmod 777 %s", pfile_path);
+
+            tlog_d("execute cmd: %s", cmd_str);
+
+            system(cmd_str);
+
+            system("sync");
+        }
 	}
 	
 	return 0;
